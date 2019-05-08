@@ -1,0 +1,5 @@
+#!/bin/zsh
+
+ll_api="https://nominatim.openstreetmap.org/search?format=json&q=${${@}// /+}"
+
+wget -O - -q "$ll_api" | jq -Mr "[.[0]|.lat,.lon|tostring]|join(\":\")"
