@@ -26,11 +26,12 @@ locate_ip() {
 }
 
 nomatim_() {
-  typeset ep=$1; shift
-  typeset args="$@"
+  typeset ep=$1
+  typeset index=$2
+  typeset args="$3"
   typeset api="https://nominatim.openstreetmap.org/$ep"
 
-  get_ll "${api}?format=json&${args}" '.[0] | {
+  get_ll "${api}?format=json&${args}" $index' | {
     "ip": null,
     "lat": .lat,
     "lon": .lon,
@@ -41,12 +42,12 @@ nomatim_() {
 
 locate_query() {
   typeset args="$@"
-  nomatim_ search "q=${args// /+}"
+  nomatim_ search '.[0]' "q=${args// /+}"
 }
 
 locate_ll() {
   typeset args="$@"
-  nomatim_ reverse "lat=$1&lon=$2"
+  nomatim_ reverse '.' "lat=$1&lon=$2"
 }
 
 cord_list() {
