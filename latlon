@@ -1,65 +1,52 @@
 #!/bin/zsh
 
-locate_ip() {
-  typeset key=$(pass api_keys/ipify)
+get_ll() {
+  typeset api=$1
+  typeset jq=$2
   typeset tmp=$(mktemp)
 
-  curl -sS "https://geo.ipify.org/api/v1?apiKey=${key}" \
-    | jq -M '. | {
+  curl -sS "$api" | jq -M "$jq" > "$tmp"
+
+  typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
+  typeset ret="${dir}/cache/${ll}"
+
+  mv "$tmp" "$ret"
+  ln -srf "$ret" "${dir}/current"
+}
+
+locate_ip() {
+  typeset key=$(pass api_keys/ipify)
+  get_ll "https://geo.ipify.org/api/v1?apiKey=${key}" '. | {
     "ip": .ip,
     "lat": .location.lat,
     "lon": .location.lng,
     "str": "\(.location.city), \(.location.region), \(.location.country)",
     "src": .
-  }' > "$tmp"
+  }'
+}
 
-  typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
-  typeset ret="${dir}/cache/${ll}"
+nomatim_() {
+  typeset ep=$1; shift
+  typeset args="$@"
+  typeset api="https://nominatim.openstreetmap.org/$ep"
 
-  mv "$tmp" "$ret"
-  ln -srf "$ret" "${dir}/current"
+  get_ll "${api}?format=json&${args}" '.[0] | {
+    "ip": null,
+    "lat": .lat,
+    "lon": .lon,
+    "str": "\(.display_name)",
+    "src": .
+  }'
 }
 
 locate_query() {
   typeset args="$@"
-  typeset api="https://nominatim.openstreetmap.org/search"
-  typeset tmp=$(mktemp)
-
-  curl -sS "${api}?format=json&q=${args// /+}"  \
-    | jq -Mr '.[0] | {
-    "ip": null,
-    "lat": .lat,
-    "lon": .lon,
-    "str": "\(.display_name)",
-    "src": .
-  }' > "$tmp"
-
-  typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
-  typeset ret="${dir}/cache/${ll}"
-
-  mv "$tmp" "$ret"
-  ln -srf "$ret" "$cur"
+  nomatim_ search "${args// /+}"
 }
 
 locate_ll() {
-  typeset args="lat=$1&lon=$2&format=json"
-  typeset api="https://nominatim.openstreetmap.org/reverse"
-  typeset tmp=$(mktemp)
-
-  curl -sS "$api?$args" \
-    | jq -Mr '. | {
-    "ip": null,
-    "lat": .lat,
-    "lon": .lon,
-    "str": "\(.display_name)",
-    "src": .
-  }' > "$tmp"
-
-  typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
-  typeset ret="${dir}/cache/${ll}"
-
-  mv "$tmp" "$ret"
-  ln -srf "$ret" "${dir}/current"
+  typeset args="$@"
+  nomatim_ reverse "lat=$1&lon=$2"
 }
 
 cord_list() {
@@ -98,6 +85,16 @@ display_cur() {
   echo "$(jq -Mr '"\(.str), \(.lat), \(.lon)"' < "$cur")"
 }
 
+validate_sel() {
+  typeset sel=$1
+  typeset max=$2
+
+  if [[ ($((sel+0)) != $sel || $sel -gt $max || $sel -lt 1) ]]; then
+    echo "please enter a valid number"
+    exit 1
+  fi
+}
+
 typeset -g dir="${XDG_DATA_HOME:-$HOME/.local/share}/latlon"
 typeset -g cdir="${dir}/cache"
 typeset -g cur="${dir}/current"
@@ -109,19 +106,23 @@ typeset -g mode=get
 
 case $1 in
   q | query) mode=query;;
+  r | rev) mode=rev;;
   ip) mode=ip;;
   c | cur | current) mode=cur;;
   l | list) mode=list;;
-  s | sel) mode=sel;;
+  s | set) mode=set;;
   v | vis) mode=vis;;
-  r | rev) mode=rev;;
   *) cat<<EOF
 usage: latlon <cmd>
 
 COMMANDS:
-update - update your coordinates
-query  - geocode an address
-get    - echo your coordinates
+query, q        - geocode an address
+ip              - guess location using public ip
+rev, r LAT LON  - add LAT,LON to the store, and try to get an associated address
+cur, c          - echo current coordinates
+list, l         - list cached coordinates
+set, s ID       - set current location
+vis, v [ACTION] - use fzf as a tui to set / remove location (default is set)
 EOF
     exit;;
 esac
@@ -144,32 +145,48 @@ case $mode in
     ;;
   vis)
     cord_list
-    sel=$(cord_list_disp $ret | fzfl --reverse)
-    ln -srf "$sel" "$cur"
+    case $2 in
+      rm | remove)
+        cord_list_disp $ret | fzfl --reverse -m | while read file; do
+          rm "$file"
+        done
+        ;;
+      *)
+        sel=$(cord_list_disp $ret | fzfl --reverse)
+        ln -srf "$sel" "$cur"
 
-    echo -n "selected: "
-    display_cur
+        echo -n "selected: "
+        display_cur
+        ;;
+    esac
     ;;
-  sel)
+  set)
     cord_list
     typeset sel="$2"
 
-    if [[ ($((sel+0)) != $sel || $sel -gt $#ret || $sel -lt 1) ]]; then
-      echo "please enter a valid number"
-      exit 1
-    fi
-
+    validate_sel $sel $#ret
     ln -srf "${ret[$sel]}" "$cur"
 
     echo -n "selected: "
     display_cur
+    ;;
+  remove)
+    cord_list
+    typeset sel="$2"
+
+    validate_sel $sel $#ret
+
+    rm "${ret[$sel]}"
     ;;
   list)
     cord_list
     cord_list_disp $ret
     ;;
   cur)
-    #[[ ! -f "$file" ]] && { echo "no data"; exit 1 }
+    [[ (! -h "$cur" || ! -f ${cur:A}) ]] && {
+      echo "no location set" >&2
+      exit 1
+    }
     jq -Mr '"\(.lat),\(.lon)"' "${dir}/current"
     ;;
 esac
