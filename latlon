@@ -111,6 +111,7 @@ case $1 in
   c | cur | current) mode=cur;;
   l | list) mode=list;;
   s | set) mode=set;;
+  rm | remove) mode=remove;;
   v | vis) mode=vis;;
   *) cat<<EOF
 usage: latlon <cmd>
@@ -122,6 +123,7 @@ rev, r LAT LON  - add LAT,LON to the store, and try to get an associated address
 cur, c          - echo current coordinates
 list, l         - list cached coordinates
 set, s ID       - set current location
+remove, rm ID   - remove location
 vis, v [ACTION] - use fzf as a tui to set / remove location (default is set)
 EOF
     exit;;
