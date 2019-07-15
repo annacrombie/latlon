@@ -8,6 +8,12 @@ get_ll() {
   curl -sS "$api" | jq -M "$jq" > "$tmp"
 
   typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
+
+  [[ (-z "$ll" || "$ll" =  *null*) ]] && {
+    echo "no results for query" >&2
+    return 1
+  }
+
   typeset ret="${dir}/cache/${ll}"
 
   mv "$tmp" "$ret"
