@@ -41,7 +41,7 @@ nomatim_() {
 
 locate_query() {
   typeset args="$@"
-  nomatim_ search "${args// /+}"
+  nomatim_ search "q=${args// /+}"
 }
 
 locate_ll() {
