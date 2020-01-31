@@ -4,7 +4,7 @@ export POSIXLY_CORRECT=1
 APIKEY_IPIFY="${APIKEY_IPIFY:-}"
 
 usage_() {
-  cat >&2 <<EOF
+  printf '
 usage: latlon [OPTIONS]
 
 OPTIONS:
@@ -16,8 +16,7 @@ OPTIONS:
   -r LAT,LON  - add coordinates and lookup descriptive annotation
   -q QUERY    - lookup coords for QUERY
   -f          - flush cache
-  -h          - show this
-EOF
+  -h          - show this'
 
   exit "$1"
 }
@@ -30,7 +29,10 @@ die_() {
 run_query() {
   local api="$1"
   local jq="$2"
-  local tmp="$(mktemp)"
+  local tmp="$dir/tmp"
+
+  command -v curl >/dev/null || die_ "curl not found"
+  command -v jq >/dev/null || die_ "jq not found"
 
   curl -sS "$api" | jq -Mr "$jq" > "$tmp"
 
@@ -109,7 +111,7 @@ list_() {
 
   find "$cdir" -type f | while read file; do
     i=$((i+1))
-    bn="$(basename "$file")"
+    bn="${file##*/}"
     lat="${bn%%,*}"
     lon="${bn##*,}"
     str="$(cat $file)"
