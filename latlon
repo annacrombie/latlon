@@ -23,7 +23,7 @@ EOF
 }
 
 die_() {
-  printf "$@\n" >&2
+  printf "%s\n" "$@" >&2
   exit 1
 }
 
@@ -41,9 +41,9 @@ run_query() {
 
   local ret="${dir}/cache/${ll}"
 
-  printf "$str" > "$ret"
+  printf "%s" "$str" > "$ret"
   rm -f "${dir}/current"*
-  printf "$ret" > "${dir}/current"
+  printf "%s" "$ret" > "${dir}/current"
 }
 
 do_geoip() {
@@ -100,7 +100,7 @@ display_cur() {
       ;;
   esac
 
-  printf "$str\n" | tee "${cur}${suf}"
+  printf "%s\n" "$str" | tee "${cur}${suf}"
 }
 
 list_() {
@@ -129,7 +129,7 @@ sel_() {
 
     [ $i -eq "$tgt" ] && {
       rm -f "$cur"*
-      printf "$file" > "$cur"
+      printf "%s" "$file" > "$cur"
       break
     }
   done
