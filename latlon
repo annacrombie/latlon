@@ -44,7 +44,6 @@ run_query() {
   local ret="${cdir}/${ll}"
 
   printf "%s" "$str" > "$ret"
-  rm -f "${dir}/current"*
   printf "%s" "$ret" > "${dir}/current"
 }
 
@@ -85,22 +84,20 @@ do_nomatim_reverse() {
 }
 
 display_cur() {
-  local str="" suf="${1:-raw}"
+  local mode="${1:-raw}" curf bn
 
-  [ -f "${cur}${suf}" ] && { cat "${cur}${suf}"; return; }
-
-  [ -f "$cur" ] || die_ "no current"
+  [ -f "$cur" ] || die_ "no selection"
   curf="$(cat "$cur")"
-  [ ! -f "$curf" ] && die_ "invalid current"
+  [ ! -f "$curf" ] && die_ "invalid selection"
 
-  case "$suf" in
-    pretty) str="$(basename "$curf") - $(cat "$curf")"
+  bn="${curf##*/}"
+
+  case "$mode" in
+    pretty) printf "%s - %s\n" "$bn" "$(cat "$curf")"
       ;;
-    raw) str="$(basename "$curf")"
+    raw) printf "%s\n" "$bn"
       ;;
   esac
-
-  printf "%s\n" "$str" | tee "${cur}${suf}"
 }
 
 list_() {
@@ -128,7 +125,6 @@ sel_() {
     i=$((i+1))
 
     [ $i -eq "$tgt" ] && {
-      rm -f "$cur"*
       printf "%s" "$file" > "$cur"
       break
     }
