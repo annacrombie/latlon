@@ -16,7 +16,7 @@ OPTIONS:
   -r LAT,LON  - add coordinates and lookup descriptive annotation
   -q QUERY    - lookup coords for QUERY
   -f          - flush cache
-  -h          - show this'
+  -h          - show this\n'
 
   exit "$1"
 }
@@ -27,21 +27,19 @@ die_() {
 }
 
 run_query() {
-  local api="$1"
-  local jq="$2"
-  local tmp="$dir/tmp"
+  api="$1" jq="$2" tmp="$dir/tmp"
 
   command -v curl >/dev/null || die_ "curl not found"
   command -v jq >/dev/null || die_ "jq not found"
 
   curl -sS "$api" | jq -Mr "$jq" > "$tmp"
 
-  local ll="$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")"
-  local str="$(jq -Mr '"\(.str)"' < "$tmp")"
+  ll="$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")"
+  str="$(jq -Mr '"\(.str)"' < "$tmp")"
 
   [ -z "$ll" ] || [ "$ll" =  *null* ] &&  die_ "no results for query"
 
-  local ret="${cdir}/${ll}"
+  ret="${cdir}/${ll}"
 
   printf "%s" "$str" > "$ret"
   printf "%s" "$ret" > "${dir}/current"
@@ -60,9 +58,7 @@ do_geoip() {
 }
 
 do_nomatim() {
-  local ep="$1"
-  local index="$2"
-  local args="$3"
+  ep="$1" index="$2" args="$3"
 
   run_query "https://nominatim.openstreetmap.org/${ep}?format=json&${args}" \
     $index' | {
@@ -75,8 +71,7 @@ do_nomatim() {
 }
 
 do_nomatim_keyword() {
-  local args="$@"
-  do_nomatim search '.[0]' "q=${args// /+}"
+  do_nomatim search '.[0]' "q=$(printf "$@" | tr ' ' '+')"
 }
 
 do_nomatim_reverse() {
@@ -84,7 +79,7 @@ do_nomatim_reverse() {
 }
 
 display_cur() {
-  local mode="${1:-raw}" curf bn
+  mode="${1:-raw}"
 
   [ -f "$cur" ] || die_ "no selection"
   curf="$(cat "$cur")"
@@ -101,8 +96,6 @@ display_cur() {
 }
 
 list_() {
-  local i curf file bn lat lon str iscur
-
   curf="$(cat "$cur")"
   i=0
 
@@ -120,7 +113,8 @@ list_() {
 }
 
 sel_() {
-  local i=0 file tgt=$1
+  i=0 tgt=$1
+
   find "$cdir" -type f | while read file; do
     i=$((i+1))
 
@@ -138,6 +132,8 @@ mode=""
 opt=""
 display="raw"
 arg=""
+
+readonly dir cdir cur
 
 [ ! -d "$dir" ] && mkdir "$dir"
 [ ! -d "$cdir" ] && mkdir -p "$cdir"
