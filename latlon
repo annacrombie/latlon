@@ -176,9 +176,9 @@ if [ "$#" -ge 1 ]; then
   done
 
   shift $((OPTIND-1))
-fi
 
-[ $# -gt 0 ] && printf "ignoring trailing arguments\n" >&2
+  [ $# -gt 0 ] && printf "ignoring trailing arguments\n" >&2
+fi
 
 case $mode in
   ip) do_geoip
