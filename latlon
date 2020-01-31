@@ -92,11 +92,9 @@ display_cur() {
   [ ! -f "$curf" ] && die_ "invalid current"
 
   case "$suf" in
-    pretty)
-      str="$(basename "$curf") - $(cat "$curf")"
+    pretty) str="$(basename "$curf") - $(cat "$curf")"
       ;;
-    raw)
-      str="$(basename "$curf")"
+    raw) str="$(basename "$curf")"
       ;;
   esac
 
@@ -149,40 +147,29 @@ arg=""
 if [ "$#" -ge 1 ]; then
   while getopts "hplSs:q:gr:f" opt; do
     case "$opt" in
-      h)
-        usage_ 0
+      h) usage_ 0
         ;;
-      p)
-        display=pretty
+      p) display=pretty
         ;;
-      S)
-        display=quiet
+      S) display=quiet
         ;;
-      l)
-        mode=list
+      l) mode=list
         ;;
-      s)
-        mode=sel
+      s) mode=sel
         arg="$OPTARG"
         ;;
-      q)
-        mode=query
+      q) mode=query
         arg="$OPTARG"
         ;;
-      g)
-        mode=ip
+      g) mode=ip
         ;;
-      r)
-        mode=rev
+      r) mode=rev
         arg="$OPTARG"
         ;;
-      f)
-        rm -rvf "$dir"
+      f) rm -rvf "$dir"
         exit
         ;;
-      ?)
-        usage_ 1
-        ;;
+      ?) usage_ 1;;
     esac
   done
 
@@ -192,22 +179,17 @@ fi
 [ $# -gt 0 ] && printf "ignoring trailing arguments\n" >&2
 
 case $mode in
-  ip)
-    do_geoip
+  ip) do_geoip
     display_cur pretty
     ;;
-  rev)
-    do_nomatim_reverse "${arg%%,*}" "${arg##*,}"
+  rev) do_nomatim_reverse "${arg%%,*}" "${arg##*,}"
     ;;
-  query)
-    do_nomatim_keyword "$arg"
+  query) do_nomatim_keyword "$arg"
     ;;
-  list)
-    list_
+  list) list_
     exit
     ;;
-  sel)
-    sel_ "$arg"
+  sel) sel_ "$arg"
     ;;
 esac
 
