@@ -39,7 +39,7 @@ run_query() {
 
   [ -z "$ll" ] || [ "$ll" =  *null* ] &&  die_ "no results for query"
 
-  local ret="${dir}/cache/${ll}"
+  local ret="${cdir}/${ll}"
 
   printf "%s" "$str" > "$ret"
   rm -f "${dir}/current"*
