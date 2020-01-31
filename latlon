@@ -1,201 +1,215 @@
-#!/bin/zsh
+#!/bin/sh -eu
 
-get_ll() {
-  typeset api=$1
-  typeset jq=$2
-  typeset tmp=$(mktemp)
+export POSIXLY_CORRECT=1
+APIKEY_IPIFY="${APIKEY_IPIFY:-}"
 
-  curl -sS "$api" | jq -M "$jq" > "$tmp"
+usage_() {
+  cat >&2 <<EOF
+usage: latlon [OPTIONS]
 
-  typeset ll=$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")
+OPTIONS:
+  -p          - display coordinates with a descriptive annotation
+  -q          - be quiet
+  -l          - list cached coordinates
+  -s INDEX    - set current location
+  -g          - geocode your current ip (requires ipify api key)
+  -r LAT,LON  - add coordinates and lookup descriptive annotation
+  -q QUERY    - lookup coords for QUERY
+  -f          - flush cache
+  -h          - show this
+EOF
 
-  [[ (-z "$ll" || "$ll" =  *null*) ]] && {
-    echo "no results for query" >&2
-    return 1
-  }
-
-  typeset ret="${dir}/cache/${ll}"
-
-  mv "$tmp" "$ret"
-  ln -srf "$ret" "${dir}/current"
+  exit "$1"
 }
 
-locate_ip() {
-  typeset key=$(pass api_keys/ipify)
-  get_ll "https://geo.ipify.org/api/v1?apiKey=${key}" '. | {
-    "ip": .ip,
-    "lat": .location.lat,
-    "lon": .location.lng,
-    "str": "\(.location.city), \(.location.region), \(.location.country)",
-    "src": .
-  }'
+die_() {
+  printf "$@\n" >&2
+  exit 1
 }
 
-nomatim_() {
-  typeset ep=$1
-  typeset index=$2
-  typeset args="$3"
-  typeset api="https://nominatim.openstreetmap.org/$ep"
+run_query() {
+  local api="$1"
+  local jq="$2"
+  local tmp="$(mktemp)"
 
-  get_ll "${api}?format=json&${args}" $index' | {
-    "ip": null,
-    "lat": .lat,
-    "lon": .lon,
-    "str": "\(.display_name)",
-    "src": .
-  }'
+  curl -sS "$api" | jq -Mr "$jq" > "$tmp"
+
+  local ll="$(jq -Mr '"\(.lat),\(.lon)"' < "$tmp")"
+  local str="$(jq -Mr '"\(.str)"' < "$tmp")"
+
+  [ -z "$ll" ] || [ "$ll" =  *null* ] &&  die_ "no results for query"
+
+  local ret="${dir}/cache/${ll}"
+
+  printf "$str" > "$ret"
+  rm -f "${dir}/current"*
+  printf "$ret" > "${dir}/current"
 }
 
-locate_query() {
-  typeset args="$@"
-  nomatim_ search '.[0]' "q=${args// /+}"
+do_geoip() {
+  [ -z "$APIKEY_IPIFY" ] && die_ "please set APIKEY_IPIFY"
+
+  run_query "https://geo.ipify.org/api/v1?apiKey=${APIKEY_IPIFY}" '. | {
+      "ip": .ip,
+      "lat": .location.lat,
+      "lon": .location.lng,
+      "str": "\(.location.city), \(.location.region), \(.location.country)",
+      "src": .
+    }'
 }
 
-locate_ll() {
-  typeset args="$@"
-  nomatim_ reverse '.' "lat=$1&lon=$2"
+do_nomatim() {
+  local ep="$1"
+  local index="$2"
+  local args="$3"
+
+  run_query "https://nominatim.openstreetmap.org/${ep}?format=json&${args}" \
+    $index' | {
+      "ip": null,
+      "lat": .lat,
+      "lon": .lon,
+      "str": "\(.display_name)",
+      "src": .
+    }'
 }
 
-cord_list() {
-  typeset -ga ret=()
-
-  for pos in ${cdir}/*; do
-    ret+="$pos"
-  done
+do_nomatim_keyword() {
+  local args="$@"
+  do_nomatim search '.[0]' "q=${args// /+}"
 }
 
-cord_list_disp() {
-  typeset arr=($@)
-  typeset i=1
-  typeset prefix
-
-  for pos in $arr; do
-    [[ "${pos:t}" = "${cur:A:t}" ]] && typeset selected=true
-
-    prefix=" "
-    [[ $selected ]] && prefix="*"
-
-    printf "%2d%s %9.4f, %9.4f | %s\n" \
-      "$i"                        \
-      "$prefix"                   \
-      "${(s:,:)${pos:t}}"         \
-      "$(jq -Mr '.str' < "$pos")"
-
-    [[ ! -t 1 ]] && echo "$pos"
-
-    ((i++))
-    unset selected
-  done
+do_nomatim_reverse() {
+  do_nomatim reverse '.' "lat=$1&lon=$2"
 }
 
 display_cur() {
-  echo "$(jq -Mr '"\(.str), \(.lat), \(.lon)"' < "$cur")"
+  local str="" suf="${1:-raw}"
+
+  [ -f "${cur}${suf}" ] && { cat "${cur}${suf}"; return; }
+
+  [ -f "$cur" ] || die_ "no current"
+  curf="$(cat "$cur")"
+  [ ! -f "$curf" ] && die_ "invalid current"
+
+  case "$suf" in
+    pretty)
+      str="$(basename "$curf") - $(cat "$curf")"
+      ;;
+    raw)
+      str="$(basename "$curf")"
+      ;;
+  esac
+
+  printf "$str\n" | tee "${cur}${suf}"
 }
 
-validate_sel() {
-  typeset sel=$1
-  typeset max=$2
+list_() {
+  local i curf file bn lat lon str iscur
 
-  if [[ ($((sel+0)) != $sel || $sel -gt $max || $sel -lt 1) ]]; then
-    echo "please enter a valid number"
-    exit 1
-  fi
+  curf="$(cat "$cur")"
+  i=0
+
+  find "$cdir" -type f | while read file; do
+    i=$((i+1))
+    bn="$(basename "$file")"
+    lat="${bn%%,*}"
+    lon="${bn##*,}"
+    str="$(cat $file)"
+    iscur=" "
+    [ "$file" = "$curf" ] && iscur="*"
+
+    printf "%2d %c %10f, %10f - %s\n" "$i" "$iscur" $lat $lon "$str"
+  done
 }
 
-typeset -g dir="${XDG_DATA_HOME:-$HOME/.local/share}/latlon"
-typeset -g cdir="${dir}/cache"
-typeset -g cur="${dir}/current"
+sel_() {
+  local i=0 file tgt=$1
+  find "$cdir" -type f | while read file; do
+    i=$((i+1))
 
-mkdir -p "$dir"
-mkdir -p "$cdir"
+    [ $i -eq "$tgt" ] && {
+      rm -f "$cur"*
+      printf "$file" > "$cur"
+      break
+    }
+  done
+}
 
-typeset -g mode=get
+dir="${XDG_DATA_HOME:-$HOME/.local/share}/latlon"
+cdir="${dir}/cache"
+cur="${dir}/current"
+mode=""
+opt=""
+display="raw"
+arg=""
 
-case $1 in
-  q | query) mode=query;;
-  r | rev) mode=rev;;
-  ip) mode=ip;;
-  c | cur | current) mode=cur;;
-  l | list) mode=list;;
-  s | set) mode=set;;
-  rm | remove) mode=remove;;
-  v | vis) mode=vis;;
-  *) cat<<EOF
-usage: latlon <cmd>
+[ ! -d "$dir" ] && mkdir "$dir"
+[ ! -d "$cdir" ] && mkdir -p "$cdir"
 
-COMMANDS:
-query, q        - geocode an address
-ip              - guess location using public ip
-rev, r LAT LON  - add LAT,LON to the store, and try to get an associated address
-cur, c          - echo current coordinates
-list, l         - list cached coordinates
-set, s ID       - set current location
-remove, rm ID   - remove location
-vis, v [ACTION] - use fzf as a tui to set / remove location (default is set)
-EOF
-    exit;;
-esac
+if [ "$#" -ge 1 ]; then
+  while getopts "hpls:qgr:f" opt; do
+    case "$opt" in
+      h)
+        usage_ 0
+        ;;
+      p)
+        display=pretty
+        ;;
+      q)
+        display=quiet
+        ;;
+      l)
+        mode=list
+        ;;
+      s)
+        mode=sel
+        arg="$OPTARG"
+        ;;
+      q)
+        mode=query
+        arg="$OPTARG"
+        ;;
+      g)
+        mode=ip
+        ;;
+      r)
+        mode=rev
+        arg="$OPTARG"
+        ;;
+      f)
+        rm -rvf "$dir"
+        exit
+        ;;
+      ?)
+        usage_ 1
+        ;;
+    esac
+  done
+
+  shift $((OPTIND-1))
+fi
+
+[ $# -gt 0 ] && printf "ignoring trailing arguments\n" >&2
 
 case $mode in
   ip)
-    locate_ip
-    display_cur
+    do_geoip
+    display_cur pretty
     ;;
   rev)
-    typeset lat=$2
-    typeset lon=$3
-    locate_ll $lat $lon
-    display_cur
+    do_nomatim_reverse "${arg%%,*}" "${arg##*,}"
     ;;
   query)
-    shift
-    locate_query $@
-    display_cur
-    ;;
-  vis)
-    cord_list
-    case $2 in
-      rm | remove)
-        cord_list_disp $ret | fzfl --reverse -m | while read file; do
-          rm "$file"
-        done
-        ;;
-      *)
-        sel=$(cord_list_disp $ret | fzfl --reverse)
-        ln -srf "$sel" "$cur"
-
-        echo -n "selected: "
-        display_cur
-        ;;
-    esac
-    ;;
-  set)
-    cord_list
-    typeset sel="$2"
-
-    validate_sel $sel $#ret
-    ln -srf "${ret[$sel]}" "$cur"
-
-    echo -n "selected: "
-    display_cur
-    ;;
-  remove)
-    cord_list
-    typeset sel="$2"
-
-    validate_sel $sel $#ret
-
-    rm "${ret[$sel]}"
+    do_nomatim_keyword "$arg"
     ;;
   list)
-    cord_list
-    cord_list_disp $ret
+    list_
+    exit
     ;;
-  cur)
-    [[ (! -h "$cur" || ! -f ${cur:A}) ]] && {
-      echo "no location set" >&2
-      exit 1
-    }
-    jq -Mr '"\(.lat),\(.lon)"' "${dir}/current"
+  sel)
+    sel_ "$arg"
     ;;
 esac
+
+[ "$display" != quiet ] && display_cur "$display"
+exit 0
