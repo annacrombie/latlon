@@ -9,7 +9,7 @@ usage: latlon [OPTIONS]
 
 OPTIONS:
   -p          - display coordinates with a descriptive annotation
-  -q          - be quiet
+  -S          - be quiet
   -l          - list cached coordinates
   -s INDEX    - set current location
   -g          - geocode your current ip (requires ipify api key)
@@ -147,7 +147,7 @@ arg=""
 [ ! -d "$cdir" ] && mkdir -p "$cdir"
 
 if [ "$#" -ge 1 ]; then
-  while getopts "hpls:qgr:f" opt; do
+  while getopts "hplSs:q:gr:f" opt; do
     case "$opt" in
       h)
         usage_ 0
@@ -155,7 +155,7 @@ if [ "$#" -ge 1 ]; then
       p)
         display=pretty
         ;;
-      q)
+      S)
         display=quiet
         ;;
       l)
